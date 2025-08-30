@@ -80,15 +80,27 @@ def user_test(user):
 
 
 header_char = "═"
-print("\n" + header_char * 60)
-
 current_user = None
+
+print("\n" + header_char * 60)
 username = "student1"
 print("\nRegular user test:\n\n")
 user_test(username)
+
+
 print("\n" + header_char * 60)
 print("\nAdmin user test:\n\n")
 username = "instructor1"
 user_test(username)
 
-# This application demonstrates the principle of Confidentiality from the CIA triad by restricting access to sensitive actions based on user roles. Admin users can perform all actions, while regular users have limited access.
+"""
+
+This application demonstrates the principle of Confidentiality from the CIA triad
+by restricting access to sensitive actions based on user roles. 
+
+Admin users can perform all actions, while regular users have limited access.
+
+Authentication is demonstrated through the login function, which verifies user
+credentials. Authorization is handled through role-based access control.
+
+"""
