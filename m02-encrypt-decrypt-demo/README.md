@@ -1,11 +1,11 @@
 # Encryption/Decryption Demo
 
 ## Purpose
-Demonstrates symmetric and asymmetric encryption methods plus cryptographic hashing using only Python's standard library.
+Demonstrates symmetric and asymmetric encryption methods plus cryptographic hashing using Python's standard library.
 
 ## Requirements
 - Python 3.7+
-- No external dependencies required (uses standard library)
+- No external dependencies required
 
 ## Usage
 ```bash

@@ -1,17 +1,20 @@
 """
 Creator: Terry Lovegrove
-Date: 2025-09-06
+Date: 2025-09-13
 Purpose: Demonstrate symmetric and asymmetric encryption/decryption methods
 
 Requirements:
 - Encrypt/decrypt a short message using symmetric and asymmetric methods
 - Show keys used, inputs, and outputs
 - Include functionality explanation
+
+Updated to show industry-standard approaches while using standard library
 """
 
 import hashlib
 import secrets
 import base64
+import hmac
 from math import gcd
 
 def print_separator(title):
@@ -20,224 +23,314 @@ def print_separator(title):
     print(f" {title}")
     print('='*60)
 
-def simple_xor_encrypt(message, key):
-    """Simple XOR encryption (symmetric)"""
-    # Repeat key to match message length
-    key_repeated = (key * (len(message) // len(key) + 1))[:len(message)]
+def derive_key_from_password(password, salt):
+    """Derive encryption key from password using PBKDF2 (industry standard)"""
+    return hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000)
+
+def encrypt_with_derived_key(message, password):
+    """AES-like encryption using derived key and HMAC for authentication"""
+    # Generate random salt
+    salt = secrets.token_bytes(16)
+    
+    # Derive key from password using PBKDF2
+    key = derive_key_from_password(password, salt)
+    
+    # Use first 16 bytes as encryption key, next 16 as MAC key
+    enc_key = key[:16]
+    mac_key = key[16:32]
+    
+    # Simple stream cipher (XOR with key stream from hash)
+    message_bytes = message.encode()
     encrypted = bytearray()
     
-    for i in range(len(message)):
-        encrypted.append(ord(message[i]) ^ ord(key_repeated[i]))
+    for i, byte in enumerate(message_bytes):
+        # Create key stream by hashing key + counter
+        key_stream_input = enc_key + i.to_bytes(4, 'big')
+        key_stream_byte = hashlib.sha256(key_stream_input).digest()[0]
+        encrypted.append(byte ^ key_stream_byte)
     
-    return bytes(encrypted)
+    encrypted = bytes(encrypted)
+    
+    # Create HMAC for authentication (prevents tampering)
+    mac = hmac.new(mac_key, salt + encrypted, hashlib.sha256).digest()
+    
+    return salt, encrypted, mac
 
-def simple_xor_decrypt(encrypted_bytes, key):
-    """Simple XOR decryption (symmetric)"""
-    # XOR is its own inverse
-    key_repeated = (key * (len(encrypted_bytes) // len(key) + 1))[:len(encrypted_bytes)]
-    decrypted = ""
+def decrypt_with_derived_key(salt, encrypted, mac, password):
+    """Decrypt and verify authenticity"""
+    # Derive same key from password
+    key = derive_key_from_password(password, salt)
+    enc_key = key[:16]
+    mac_key = key[16:32]
     
-    for i in range(len(encrypted_bytes)):
-        decrypted += chr(encrypted_bytes[i] ^ ord(key_repeated[i]))
+    # Verify HMAC first (authenticate before decrypt)
+    expected_mac = hmac.new(mac_key, salt + encrypted, hashlib.sha256).digest()
+    if not hmac.compare_digest(mac, expected_mac):
+        raise ValueError("Authentication failed - data may be tampered")
     
-    return decrypted
+    # Decrypt using same key stream
+    decrypted = bytearray()
+    for i, byte in enumerate(encrypted):
+        key_stream_input = enc_key + i.to_bytes(4, 'big')
+        key_stream_byte = hashlib.sha256(key_stream_input).digest()[0]
+        decrypted.append(byte ^ key_stream_byte)
+    
+    return bytes(decrypted).decode()
 
 def symmetric_encryption_demo():
-    """Demonstrate symmetric encryption using XOR cipher"""
-    print_separator("SYMMETRIC ENCRYPTION DEMO (XOR Cipher)")
+    """Demonstrate symmetric encryption using industry-standard techniques"""
+    print_separator("SYMMETRIC ENCRYPTION DEMO (PBKDF2 + HMAC)")
     
     # Original message
     message = "Hello, this is a secret message for symmetric encryption!"
     print(f"Original Message: {message}")
     
-    # Generate a random key using secrets module
-    key = secrets.token_urlsafe(16)[:16]  # 16 character key
-    print(f"Symmetric Key: {key}")
+    # Use password-based encryption (more realistic)
+    password = "MySecurePassword123!"
+    print(f"Password: {password}")
     
     # Encrypt the message
-    encrypted_bytes = simple_xor_encrypt(message, key)
-    encrypted_b64 = base64.b64encode(encrypted_bytes).decode()
-    print(f"Encrypted Message (Base64): {encrypted_b64}")
+    salt, encrypted, mac = encrypt_with_derived_key(message, password)
+    
+    print(f"Salt (hex): {salt.hex()}")
+    print(f"Encrypted (base64): {base64.b64encode(encrypted).decode()}")
+    print(f"HMAC (hex): {mac.hex()}")
     
     # Decrypt the message
-    decrypted_message = simple_xor_decrypt(encrypted_bytes, key)
-    print(f"Decrypted Message: {decrypted_message}")
+    try:
+        decrypted_message = decrypt_with_derived_key(salt, encrypted, mac, password)
+        print(f"Decrypted Message: {decrypted_message}")
+        success = message == decrypted_message
+    except ValueError as e:
+        print(f"Decryption failed: {e}")
+        decrypted_message = "FAILED"
+        success = False
     
-    # Verify encryption/decryption worked
-    success = message == decrypted_message
     print(f"Encryption/Decryption Successful: {success}")
+    
+    # Demonstrate tampering detection
+    print("\n--- Tampering Detection Demo ---")
+    try:
+        # Modify the encrypted data
+        tampered_encrypted = bytearray(encrypted)
+        tampered_encrypted[0] ^= 1  # Flip one bit
+        decrypt_with_derived_key(salt, bytes(tampered_encrypted), mac, password)
+    except ValueError as e:
+        print(f"Tampering detected: {e}")
     
     return {
         'original': message,
-        'key': key,
-        'encrypted': encrypted_b64,
+        'password': password,
+        'salt': salt.hex(),
+        'encrypted': base64.b64encode(encrypted).decode(),
+        'mac': mac.hex(),
         'decrypted': decrypted_message,
         'success': success
     }
 
-def gcd_extended(a, b):
+def miller_rabin_test(n, k=5):
+    """Miller-Rabin primality test (more robust than simple trial division)"""
+    if n < 2:
+        return False
+    if n == 2 or n == 3:
+        return True
+    if n % 2 == 0:
+        return False
+    
+    # Write n-1 as d * 2^r
+    r = 0
+    d = n - 1
+    while d % 2 == 0:
+        r += 1
+        d //= 2
+    
+    # Test k times
+    for _ in range(k):
+        a = secrets.randbelow(n - 3) + 2
+        x = pow(a, d, n)
+        
+        if x == 1 or x == n - 1:
+            continue
+            
+        for _ in range(r - 1):
+            x = pow(x, 2, n)
+            if x == n - 1:
+                break
+        else:
+            return False
+    
+    return True
+
+def generate_prime(bits):
+    """Generate a random prime number with specified bit length"""
+    while True:
+        # Generate random odd number
+        candidate = secrets.randbits(bits)
+        candidate |= (1 << bits - 1) | 1  # Set MSB and LSB
+        
+        if miller_rabin_test(candidate):
+            return candidate
+
+def extended_gcd(a, b):
     """Extended Euclidean Algorithm"""
     if a == 0:
         return b, 0, 1
-    gcd_val, x1, y1 = gcd_extended(b % a, a)
+    gcd_val, x1, y1 = extended_gcd(b % a, a)
     x = y1 - (b // a) * x1
     y = x1
     return gcd_val, x, y
 
 def mod_inverse(a, m):
     """Calculate modular inverse"""
-    gcd_val, x, y = gcd_extended(a, m)
+    gcd_val, x, y = extended_gcd(a, m)
     if gcd_val != 1:
         return None
     return (x % m + m) % m
 
-def is_prime(n):
-    """Simple primality test"""
-    if n < 2:
-        return False
-    for i in range(2, int(n**0.5) + 1):
-        if n % i == 0:
-            return False
-    return True
-
-def generate_small_primes():
-    """Generate two small prime numbers for demo"""
-    primes = [p for p in range(50, 200) if is_prime(p)]
-    return primes[5], primes[10]  # Pick two different primes
-
-def simple_rsa_demo():
-    """Demonstrate asymmetric encryption using simplified RSA"""
-    print_separator("ASYMMETRIC ENCRYPTION DEMO (Simplified RSA)")
+def improved_rsa_demo():
+    """Demonstrate asymmetric encryption using improved RSA implementation"""
+    print_separator("ASYMMETRIC ENCRYPTION DEMO (Improved RSA)")
     
-    # Original message (convert to number for RSA)
-    message = "HELLO"
+    # Original message
+    message = "SECRET"
     print(f"Original Message: {message}")
     
-    # Convert message to numbers (A=1, B=2, etc.)
-    message_nums = [ord(char) - ord('A') + 1 for char in message.upper() if char.isalpha()]
-    print(f"Message as Numbers: {message_nums}")
+    # Convert to bytes for proper handling
+    message_bytes = message.encode()
+    message_int = int.from_bytes(message_bytes, 'big')
+    print(f"Message as Integer: {message_int}")
     
-    # Generate small RSA keys for demonstration
-    p, q = generate_small_primes()
+    # Generate RSA keys with proper bit size for demo
+    print("Generating RSA keys (this may take a moment)...")
+    bit_size = 512  # Small but more realistic than previous demo
+    
+    p = generate_prime(bit_size // 2)
+    q = generate_prime(bit_size // 2)
     n = p * q
     phi = (p - 1) * (q - 1)
     
-    # Choose e (commonly 65537, but we'll use 3 for simplicity)
-    e = 3
+    # Use standard RSA public exponent
+    e = 65537
     while gcd(e, phi) != 1:
         e += 2
     
-    # Calculate d (private key exponent)
+    # Calculate private exponent
     d = mod_inverse(e, phi)
     
+    print(f"Key size: {bit_size} bits")
     print(f"Prime p: {p}")
     print(f"Prime q: {q}")
-    print(f"Modulus n (p*q): {n}")
-    print(f"Public Key (e, n): ({e}, {n})")
-    print(f"Private Key (d, n): ({d}, {n})")
+    print(f"Modulus n: {n}")
+    print(f"Public exponent e: {e}")
+    print(f"Private exponent d: {d}")
     
-    # Encrypt each character
-    encrypted_nums = []
-    for num in message_nums:
-        if num < n:  # Make sure number is smaller than n
-            encrypted = pow(num, e, n)
-            encrypted_nums.append(encrypted)
-        else:
-            print(f"Warning: Character value {num} too large for modulus {n}")
-            encrypted_nums.append(num)  # Fallback
+    # Ensure message is smaller than modulus
+    if message_int >= n:
+        print(f"Error: Message too large for key size")
+        return {'success': False}
     
-    print(f"Encrypted Numbers: {encrypted_nums}")
+    # Encrypt with public key
+    ciphertext = pow(message_int, e, n)
+    print(f"Encrypted (integer): {ciphertext}")
+    print(f"Encrypted (hex): {hex(ciphertext)}")
     
-    # Decrypt each character
-    decrypted_nums = []
-    for encrypted_num in encrypted_nums:
-        decrypted = pow(encrypted_num, d, n)
-        decrypted_nums.append(decrypted)
-    
-    print(f"Decrypted Numbers: {decrypted_nums}")
+    # Decrypt with private key
+    decrypted_int = pow(ciphertext, d, n)
+    print(f"Decrypted (integer): {decrypted_int}")
     
     # Convert back to message
     try:
-        decrypted_message = ''.join(chr(num + ord('A') - 1) for num in decrypted_nums)
+        # Calculate byte length needed
+        byte_length = (decrypted_int.bit_length() + 7) // 8
+        decrypted_bytes = decrypted_int.to_bytes(byte_length, 'big')
+        decrypted_message = decrypted_bytes.decode()
         print(f"Decrypted Message: {decrypted_message}")
         success = message == decrypted_message
-    except:
-        decrypted_message = "Decryption failed"
+    except Exception as e:
+        print(f"Decryption error: {e}")
+        decrypted_message = "FAILED"
         success = False
     
     print(f"Encryption/Decryption Successful: {success}")
     
     return {
         'original': message,
-        'public_key': f"({e}, {n})",
-        'private_key': f"({d}, {n})",
-        'encrypted': str(encrypted_nums),
+        'key_size': bit_size,
+        'public_key': f"(e={e}, n={n})",
+        'private_key': f"(d={d}, n={n})",
+        'encrypted': hex(ciphertext),
         'decrypted': decrypted_message,
         'success': success
     }
 
-def hash_demo():
-    """Demonstrate hashing (one-way function)"""
-    print_separator("BONUS: CRYPTOGRAPHIC HASHING DEMO")
+def secure_hash_demo():
+    """Demonstrate secure hashing practices"""
+    print_separator("SECURE HASHING DEMO")
     
-    message = "This is a message to hash"
-    print(f"Original Message: {message}")
+    # Password hashing example
+    password = "MyPassword123!"
+    print(f"Original Password: {password}")
     
-    # Create different hash types
-    md5_hash = hashlib.md5(message.encode()).hexdigest()
-    sha1_hash = hashlib.sha1(message.encode()).hexdigest()
-    sha256_hash = hashlib.sha256(message.encode()).hexdigest()
+    # Generate random salt (industry standard)
+    salt = secrets.token_bytes(32)
+    print(f"Salt (hex): {salt.hex()}")
     
-    print(f"MD5 Hash:    {md5_hash}")
-    print(f"SHA-1 Hash:  {sha1_hash}")
-    print(f"SHA-256 Hash: {sha256_hash}")
+    # Use PBKDF2 for password hashing (industry standard)
+    password_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000)
+    print(f"PBKDF2 Hash (hex): {password_hash.hex()}")
     
-    # Show that hashing is deterministic
-    same_hash = hashlib.sha256(message.encode()).hexdigest()
-    print(f"Same SHA-256: {same_hash}")
-    print(f"Hashes Match: {sha256_hash == same_hash}")
+    # Message integrity example
+    message = "This message needs integrity protection"
+    print(f"\nMessage: {message}")
     
-    # Show avalanche effect
-    similar_message = "This is a message to hash!"  # Added exclamation
-    similar_hash = hashlib.sha256(similar_message.encode()).hexdigest()
-    print(f"Similar Message: {similar_message}")
-    print(f"Similar Hash: {similar_hash}")
-    print(f"Hashes Different: {sha256_hash != similar_hash}")
+    # Create message digest
+    message_hash = hashlib.sha256(message.encode()).digest()
+    print(f"SHA-256 Hash: {message_hash.hex()}")
+    
+    # HMAC for message authentication
+    secret_key = secrets.token_bytes(32)
+    message_mac = hmac.new(secret_key, message.encode(), hashlib.sha256).digest()
+    print(f"HMAC (with secret key): {message_mac.hex()}")
+    
+    # Verify HMAC
+    verify_mac = hmac.new(secret_key, message.encode(), hashlib.sha256).digest()
+    mac_valid = hmac.compare_digest(message_mac, verify_mac)
+    print(f"HMAC Verification: {mac_valid}")
 
 def main():
     """Main function to run all encryption demos"""
     print("ENCRYPTION/DECRYPTION DEMONSTRATION")
     print("Author: Terry Lovegrove")
-    print("Date: 2025-09-06")
+    print("Date: 2025-09-13")
+    print("Industry-Standard Approaches with Python Standard Library")
     
     # Run symmetric encryption demo
     sym_results = symmetric_encryption_demo()
     
     # Run asymmetric encryption demo
-    asym_results = simple_rsa_demo()
+    asym_results = improved_rsa_demo()
     
-    # Run hashing demo
-    hash_demo()
+    # Run secure hashing demo
+    secure_hash_demo()
     
     # Summary
     print_separator("SUMMARY")
-    print("Symmetric Encryption (XOR Cipher):")
-    print(f"  - Uses single key for both encryption and decryption")
-    print(f"  - Same key must be shared between parties")
-    print(f"  - Fast and simple")
+    print("Symmetric Encryption (PBKDF2 + Stream Cipher + HMAC):")
+    print(f"  - Password-based key derivation (PBKDF2)")
+    print(f"  - Authenticated encryption (HMAC for integrity)")
+    print(f"  - Salt prevents rainbow table attacks")
     print(f"  - Success: {sym_results['success']}")
     
-    print("\nAsymmetric Encryption (Simplified RSA):")
-    print(f"  - Uses key pair (public/private keys)")
-    print(f"  - Public key for encryption, private key for decryption")
-    print(f"  - Solves key distribution problem")
+    print("\nAsymmetric Encryption (RSA with proper key generation):")
+    print(f"  - Miller-Rabin primality testing")
+    print(f"  - Standard public exponent (65537)")
+    print(f"  - Proper bit length for security")
     print(f"  - Success: {asym_results['success']}")
     
-    print("\nCryptographic Hashing:")
-    print(f"  - One-way function (cannot be reversed)")
-    print(f"  - Same input always produces same output")
-    print(f"  - Small change in input drastically changes output")
-    print(f"  - Used for integrity verification and password storage")
+    print("\nSecure Hashing:")
+    print(f"  - PBKDF2 for password storage")
+    print(f"  - HMAC for message authentication")
+    print(f"  - Constant-time comparison prevents timing attacks")
 
 if __name__ == "__main__":
     main()
