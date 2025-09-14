@@ -1,0 +1,12 @@
+# Requirements for Secure Coding Course - Module 03
+# Secure Hashing and Encryption
+
+# Cryptography library for digital signatures, key generation, and encryption
+cryptography>=45.0.0
+
+# Note: Python standard library modules used:
+# - hashlib (SHA-256 hashing)
+# - argparse (command-line interfaces)
+# - logging (secure logging)
+# - pathlib (secure file path handling)
+# - os (file permissions and access control)
