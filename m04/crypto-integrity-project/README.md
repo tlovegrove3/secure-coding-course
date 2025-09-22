@@ -69,9 +69,42 @@ The application implements a **hash-then-encrypt** security pattern:
 
 ## Security Properties
 
-- **🔐 Confidentiality**: AES-256 encryption ensures data is unreadable without the key
-- **🛡️ Integrity**: SHA-256 hashing detects any tampering or corruption
-- **🚀 Availability**: Authorized users can reliably decrypt and access their data
+### How This Solution Upholds the CIA Triad
+
+**🔐 Confidentiality**  
+Data confidentiality is achieved through AES-256 encryption in GCM mode. The original plaintext is transformed into ciphertext using a 256-bit encryption key, making it computationally infeasible for unauthorized parties to read the data without the key. Even with access to the encrypted file, attackers cannot derive meaningful information from the random-appearing ciphertext.
+
+**🛡️ Integrity**  
+Data integrity is ensured through a two-layer approach:
+1. **SHA-256 hashing**: Creates a unique 256-bit fingerprint of the original data before encryption
+2. **GCM authentication**: Provides built-in authentication tags that detect any modifications to the ciphertext
+
+If even a single bit is modified in either the original data or the encrypted data, the verification process will fail, alerting users to potential tampering or corruption.
+
+**🚀 Availability**  
+Data availability is maintained by ensuring authorized users can reliably decrypt and access their information. The system stores all necessary cryptographic components (encrypted data, hash, key, IV, authentication tag) in a structured format, enabling consistent decryption across different systems and time periods.
+
+### Role of Entropy and Key Generation
+
+**Entropy Sources**  
+This implementation uses Python's `secrets` module, which leverages the operating system's cryptographically secure random number generator (CSPRNG). On modern systems, this draws entropy from hardware sources such as:
+- CPU thermal noise and timing variations
+- Mouse movements and keyboard timings  
+- Hardware random number generators (if available)
+- System interrupt timing variations
+
+**Key Generation Process**  
+1. **AES-256 Keys**: Generated using `secrets.token_bytes(32)` to produce 256 bits of cryptographic randomness
+2. **Initialization Vectors (IVs)**: Created using `os.urandom(16)` for each encryption operation, ensuring unique ciphertext even for identical plaintexts
+3. **Salt Generation**: When used, employs `secrets.token_bytes(32)` for hash salting
+
+**Security Significance**  
+High-quality entropy is critical because:
+- **Unpredictable keys** prevent brute-force and dictionary attacks
+- **Unique IVs** ensure semantic security (same plaintext produces different ciphertext)
+- **Cryptographic randomness** resists statistical analysis and pattern detection
+
+The use of cryptographically secure sources (rather than pseudorandom generators like `random.random()`) ensures that keys cannot be predicted or reproduced by attackers, maintaining the fundamental security assumptions of the cryptographic algorithms.
 
 ## Example Output
 
@@ -114,5 +147,6 @@ crypto-integrity-project/
 ## Dependencies
 
 - `cryptography` - Industry-standard cryptographic library
+- `secrets` - Cryptographically secure random number generation
 
 All dependencies are automatically managed by UV.

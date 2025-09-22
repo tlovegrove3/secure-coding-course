@@ -38,7 +38,7 @@ Advanced cryptographic implementations including SHA-256 hashing, Caesar cipher,
    python sha_256_hash.py --help
    ```
 
-## Prerequisites
+## Prerequisitesc
 
 - Python 3.7 or higher
 - pip (Python package installer)
