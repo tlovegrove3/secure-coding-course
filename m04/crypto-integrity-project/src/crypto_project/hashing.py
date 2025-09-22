@@ -1,7 +1,8 @@
 """SHA-256 hashing functionality for integrity verification."""
 
 import hashlib
-import secrets
+# TODO - utilize salt generation
+# import secrets
 from typing import Optional
 
 

@@ -1,0 +1,22 @@
+CONFIDENTIAL FINANCIAL REPORT
+============================
+
+Q4 2024 Employee Compensation Review
+
+Employee ID | Name           | Salary    | Bonus     | SSN
+-----------|----------------|-----------|-----------|-------------
+EMP001     | John Smith     | $85,000   | $12,750   | 123-45-6789
+EMP002     | Jane Doe       | $92,000   | $13,800   | 987-65-4321  
+EMP003     | Bob Johnson    | $78,500   | $11,775   | 555-12-3456
+EMP004     | Alice Brown    | $96,500   | $14,475   | 444-55-6677
+
+BANK ROUTING INFORMATION:
+Primary Account: 123456789 (Routing: 021000021)
+Payroll Account: 987654321 (Routing: 011401533)
+
+CRITICAL: This data must be encrypted before transmission
+or storage. Any breach could result in identity theft or
+financial fraud.
+
+Hash verification ensures data integrity and detects
+unauthorized modifications.
