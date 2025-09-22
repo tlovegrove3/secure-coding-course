@@ -45,5 +45,5 @@ class HashingService:
     
     def verify_hash(self, data: bytes, expected_hash: str) -> bool:
         """Verify data against expected hash."""
-        # TODO: Implement hash verification
-        pass
+        computed_hash = self.hash_data(data)
+        return computed_hash == expected_hash
