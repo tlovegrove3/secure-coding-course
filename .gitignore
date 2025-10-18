@@ -3,6 +3,10 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+#tests
+test_regex.py
+
+
 # Videos
 *.mp4
 # C extensions
